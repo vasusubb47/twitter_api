@@ -5,6 +5,7 @@ mod database;
 mod middlewares;
 mod models;
 mod schema;
+mod utils;
 
 use crate::controlers::{client::*, tweet::*};
 use crate::database::PgDbPool;

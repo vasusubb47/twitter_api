@@ -1,11 +1,11 @@
 use diesel::query_dsl::methods::SelectDsl;
-use diesel::{insert_into, RunQueryDsl, SelectableHelper};
-use rocket::{self, get, post, serde::json::Json, State};
-use uuid::Uuid;
+use diesel::{RunQueryDsl, SelectableHelper};
+use rocket::{self, get, post, response::status::BadRequest, serde::json::Json, State};
+// use uuid::Uuid;
 
 use crate::database::{DBConnection, PgDbPool};
 use crate::schema::client::dsl::*;
-use crate::{ClientInfo, RegisterClientInfo};
+use crate::{register_client_fn, ClientErrors, ClientInfo, RegisterClientInfo};
 
 #[get("/client")]
 pub fn get_all_clients(pool: &State<PgDbPool>) -> Json<Vec<ClientInfo>> {
@@ -20,16 +20,20 @@ pub fn get_all_clients(pool: &State<PgDbPool>) -> Json<Vec<ClientInfo>> {
 }
 
 #[post("/register", format = "json", data = "<reg_user>")]
-pub fn register_client(pool: &State<PgDbPool>, reg_user: Json<RegisterClientInfo>) -> Json<Uuid> {
+pub fn register_client(
+    pool: &State<PgDbPool>,
+    reg_user: Json<RegisterClientInfo>,
+) -> Result<Json<ClientInfo>, BadRequest<String>> {
     let mut pool_coon: DBConnection = pool.get_connection();
 
-    println!("{:#?}", reg_user);
+    let new_client = register_client_fn(&mut pool_coon, &reg_user.0);
 
-    let new_client: Uuid = insert_into(client)
-        .values(&reg_user.0)
-        .returning(id)
-        .get_result(&mut pool_coon)
-        .unwrap();
-
-    Json(new_client)
+    match new_client {
+        Ok(client_info) => Ok(Json(client_info)),
+        Err(err) => match err {
+            ClientErrors::ClientEmailAllreadyExists(err) => Err(BadRequest(err)),
+            ClientErrors::ClientUserNameAllreadyExists(err) => Err(BadRequest(err)),
+            ClientErrors::ClientNotFound(err_info) => Err(BadRequest(err_info)),
+        },
+    }
 }
