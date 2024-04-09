@@ -4,8 +4,8 @@ use rocket::{self, get, post, response::status::BadRequest, serde::json::Json, S
 // use uuid::Uuid;
 
 use crate::database::{DBConnection, PgDbPool};
+use crate::models::client::*;
 use crate::schema::client::dsl::*;
-use crate::{register_client_fn, ClientErrors, ClientInfo, RegisterClientInfo};
 
 #[get("/client")]
 pub fn get_all_clients(pool: &State<PgDbPool>) -> Json<Vec<ClientInfo>> {
@@ -34,6 +34,26 @@ pub fn register_client(
             ClientErrors::ClientEmailAllreadyExists(err) => Err(BadRequest(err)),
             ClientErrors::ClientUserNameAllreadyExists(err) => Err(BadRequest(err)),
             ClientErrors::ClientNotFound(err_info) => Err(BadRequest(err_info)),
+            _ => panic!("never runs"),
+        },
+    }
+}
+
+#[post("/login", format = "json", data = "<login_info>")]
+pub fn login_client(
+    pool: &State<PgDbPool>,
+    login_info: Json<LoginClientInfo>,
+) -> Result<Json<BasicClientInfo>, BadRequest<String>> {
+    let mut pool_coon: DBConnection = pool.get_connection();
+
+    let basic_login_info = login_client_fn(&mut pool_coon, &login_info);
+
+    match basic_login_info {
+        Ok(basic_login_info) => Ok(Json(basic_login_info)),
+        Err(err) => match err {
+            ClientErrors::ClientWrongPassword(err_info) => Err(BadRequest(err_info)),
+            ClientErrors::ClientNotFound(err_info) => Err(BadRequest(err_info)),
+            _ => panic!("never runs"),
         },
     }
 }

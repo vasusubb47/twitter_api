@@ -1,5 +1,6 @@
 use rocket::{
     fairing::{Fairing, Info, Kind},
+    http::Cookie,
     Data, Request, Response,
 };
 
@@ -15,10 +16,12 @@ impl Fairing for LoginCheck {
     }
 
     async fn on_request(&self, request: &mut Request<'_>, _: &mut Data<'_>) {
-        println!("on_request: {:?}", request.headers())
+        let _auth_cookie = request.cookies().get("auth");
+        println!("on_request: {:?}", request.headers());
     }
 
     async fn on_response<'r>(&self, _request: &'r Request<'_>, response: &mut Response<'r>) {
-        println!("on_response: {:?}", response.headers())
+        response.set_header(Cookie::new("auth", "test cookie"));
+        println!("on_response: {:?}", response.headers());
     }
 }

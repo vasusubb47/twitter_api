@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::database::DBConnection;
 use crate::schema::client::dsl::*;
-use crate::utils::crypto_util::hash_passcode_with_salt;
+use crate::utils::crypto_util::{compare_passcode, hash_passcode_with_salt};
 
 #[derive(Queryable, Selectable, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::client)]
@@ -55,10 +55,34 @@ pub struct RegisterClientInfo {
     pub hasspass: String,
 }
 
+#[derive(Queryable, Selectable, Serialize, Deserialize)]
+#[diesel(table_name = crate::schema::client)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct ClientLoginInfo {
+    pub id: Uuid,
+    pub email: String,
+    pub user_name: String,
+    pub hasspass: String,
+}
+
+#[derive(Queryable, Serialize, Deserialize)]
+pub struct BasicClientInfo {
+    pub id: Uuid,
+    pub email: String,
+    pub user_name: String,
+}
+
+#[derive(Queryable, Debug, Serialize, Deserialize)]
+pub struct LoginClientInfo {
+    pub email: String,
+    pub hasspass: String,
+}
+
 #[derive(Debug)]
 pub enum ClientErrors {
     ClientEmailAllreadyExists(String),
     ClientUserNameAllreadyExists(String),
+    ClientWrongPassword(String),
     ClientNotFound(String),
 }
 
@@ -95,6 +119,43 @@ pub fn register_client_fn(
     let registered_client = get_client_by_email(pool_coon, client_info.email).unwrap();
 
     Ok(registered_client)
+}
+
+pub fn login_client_fn(
+    pool_coon: &mut DBConnection,
+    login_info: &LoginClientInfo,
+) -> Result<BasicClientInfo, ClientErrors> {
+    let client_login_info: Result<ClientLoginInfo, diesel::result::Error> = client
+        .filter(email.eq(login_info.email.to_owned()))
+        .select(ClientLoginInfo::as_select())
+        .first(pool_coon);
+
+    match client_login_info {
+        Ok(_) => {}
+        Err(err) => {
+            println!("error while getting client info: {:?}", err);
+            return Err(ClientErrors::ClientNotFound(format!(
+                "error while getting client info: {:?}",
+                err
+            )));
+        }
+    };
+    let client_info = client_login_info.unwrap();
+
+    if compare_passcode(
+        client_info.hasspass.to_owned(),
+        login_info.hasspass.to_owned(),
+    ) {
+        Ok(BasicClientInfo {
+            id: client_info.id,
+            email: client_info.email.to_owned(),
+            user_name: client_info.user_name.to_owned(),
+        })
+    } else {
+        Err(ClientErrors::ClientWrongPassword(
+            "wrong password".to_owned(),
+        ))
+    }
 }
 
 pub fn get_client_by_email(
